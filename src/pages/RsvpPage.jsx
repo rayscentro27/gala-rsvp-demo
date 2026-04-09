@@ -3,6 +3,15 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
 const BASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const UI = {
+  bg: "#f9fafb",
+  card: "#ffffff",
+  border: "#e5e7eb",
+  text: "#111827",
+  muted: "#6b7280",
+  accent: "#2563eb",
+  dark: "#111827",
+};
 
 export default function RsvpPage() {
   const { token } = useParams();
@@ -99,6 +108,7 @@ export default function RsvpPage() {
 
   const { guest, event, token: tokenInfo, rsvpConfirmed } = data;
   const locked = tokenInfo.used || tokenInfo.expired;
+  const tierLabel = guest.tier === "founder" ? "Ambassador" : guest.tier;
 
   // Determine seat allowance
   let maxSeats = 1;
@@ -114,29 +124,32 @@ export default function RsvpPage() {
   // Show a polished confirmation if RSVP just submitted
   if (rsvpConfirmed) {
     return (
-      <div style={{ maxWidth: 640, margin: "40px auto", padding: 24, textAlign: "center" }}>
-        <h1>Thank you, {guest.full_name}!</h1>
-        <p style={{ fontSize: 18, marginTop: 24 }}>
-          Your RSVP has been confirmed: <b style={{ textTransform: "capitalize" }}>{rsvpConfirmed}</b>
-        </p>
-        {guest.seat_count > 1 && rsvpConfirmed === "accepted" && (
-          <p style={{ marginTop: 16 }}>Seats reserved: <b>{guest.seat_count}</b></p>
-        )}
-        <p style={{ marginTop: 32, color: "#666" }}>We look forward to seeing you at {event.name}!</p>
+      <div style={{ background: UI.bg, minHeight: "100vh", padding: "48px 16px" }}>
+        <div style={{ maxWidth: 640, margin: "0 auto", padding: 28, textAlign: "center", background: UI.card, borderRadius: 16, border: `1px solid ${UI.border}` }}>
+          <h1 style={{ color: UI.text, marginTop: 0 }}>Thank you, {guest.full_name}!</h1>
+          <p style={{ fontSize: 18, marginTop: 16, color: UI.text }}>
+            Your RSVP has been confirmed: <b style={{ textTransform: "capitalize" }}>{rsvpConfirmed}</b>
+          </p>
+          {guest.seat_count > 1 && rsvpConfirmed === "accepted" && (
+            <p style={{ marginTop: 16 }}>Seats reserved: <b>{guest.seat_count}</b></p>
+          )}
+          <p style={{ marginTop: 24, color: UI.muted }}>We look forward to seeing you at {event.name}.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: 640, margin: "40px auto", padding: 24 }}>
-      <h1>{event.name}</h1>
-      <p style={{ fontSize: 18 }}>Welcome, <strong>{guest.full_name}</strong>!</p>
-      <p style={{ color: "#666" }}>Please confirm your attendance below. {seatLabel}</p>
-      <div style={{ margin: "18px 0" }}>
-        <div><strong>Email:</strong> {guest.email}</div>
-        <div><strong>Tier:</strong> {guest.tier}</div>
-        <div><strong>Status:</strong> {guest.status}</div>
-      </div>
+    <div style={{ background: UI.bg, minHeight: "100vh", padding: "48px 16px" }}>
+      <div style={{ maxWidth: 640, margin: "0 auto", padding: 28, background: UI.card, borderRadius: 16, border: `1px solid ${UI.border}` }}>
+        <h1 style={{ marginTop: 0, color: UI.text }}>{event.name}</h1>
+        <p style={{ fontSize: 18, color: UI.text }}>Welcome, <strong>{guest.full_name}</strong>.</p>
+        <p style={{ color: UI.muted }}>Please confirm your attendance below. {seatLabel}</p>
+        <div style={{ margin: "18px 0", color: UI.text }}>
+          <div><strong>Email:</strong> {guest.email}</div>
+          <div><strong>Tier:</strong> {tierLabel}</div>
+          <div><strong>Status:</strong> {guest.status}</div>
+        </div>
 
       {tokenInfo.expired && (
         <p style={{ color: "red" }}>This RSVP link has expired.</p>
@@ -146,48 +159,49 @@ export default function RsvpPage() {
         <p style={{ color: "orange" }}>This RSVP link has already been used.</p>
       )}
 
-      {!locked && (
-        <form
-          onSubmit={e => {
-            e.preventDefault();
-            submitResponse("accepted");
-          }}
-          style={{ marginTop: 24 }}
-        >
-          {maxSeats > 1 && (
-            <div style={{ marginBottom: 16 }}>
-              <label>
-                Number of guests attending:
-                <select
-                  value={seatCount}
-                  onChange={e => setSeatCount(Number(e.target.value))}
-                  style={{ marginLeft: 8, padding: 6, borderRadius: 6, border: "1px solid #ddd" }}
-                  disabled={submitting}
-                >
-                  {Array.from({ length: maxSeats }, (_, i) => i + 1).map(n => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </select>
-              </label>
+        {!locked && (
+          <form
+            onSubmit={e => {
+              e.preventDefault();
+              submitResponse("accepted");
+            }}
+            style={{ marginTop: 24 }}
+          >
+            {maxSeats > 1 && (
+              <div style={{ marginBottom: 16 }}>
+                <label>
+                  Number of guests attending:
+                  <select
+                    value={seatCount}
+                    onChange={e => setSeatCount(Number(e.target.value))}
+                    style={{ marginLeft: 8, padding: 8, borderRadius: 10, border: `1px solid ${UI.border}` }}
+                    disabled={submitting}
+                  >
+                    {Array.from({ length: maxSeats }, (_, i) => i + 1).map(n => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 12, marginTop: 10, flexWrap: "wrap" }}>
+              <button type="submit" disabled={submitting} style={{ background: UI.dark, color: "#fff", border: "none", borderRadius: 999, padding: "10px 18px", fontWeight: 600, cursor: "pointer" }}>
+                {submitting ? "Submitting..." : "Accept Invitation"}
+              </button>
+              <button
+                type="button"
+                onClick={() => submitResponse("declined")}
+                disabled={submitting}
+                style={{ background: "#fff", color: UI.text, border: `1px solid ${UI.border}`, borderRadius: 999, padding: "10px 18px", fontWeight: 600, cursor: "pointer" }}
+              >
+                Decline
+              </button>
             </div>
-          )}
-          <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
-            <button type="submit" disabled={submitting}>
-              {submitting ? "Submitting..." : "Accept Invitation"}
-            </button>
-            <button
-              type="button"
-              onClick={() => submitResponse("declined")}
-              disabled={submitting}
-              style={{ background: "#eee", color: "#444" }}
-            >
-              Decline
-            </button>
-          </div>
-        </form>
-      )}
+          </form>
+        )}
 
-      {message && <p style={{ marginTop: 20 }}>{message}</p>}
+        {message && <p style={{ marginTop: 20 }}>{message}</p>}
+      </div>
     </div>
   );
 }
