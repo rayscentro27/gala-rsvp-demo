@@ -10,6 +10,28 @@ function getTierLabel(tier) {
   return tier || "—";
 }
 
+function formatDateTime(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString();
+}
+
+function getStatusLabel(status) {
+  if (status === "waitlisted") return "Waitlisted";
+  if (status === "not_invited") return "Not Invited";
+  if (status === "invited") return "Invited";
+  if (status === "accepted") return "Accepted";
+  if (status === "declined") return "Declined";
+  return status || "—";
+}
+
+function buildPreviewTemplate(template, replacements) {
+  return String(template || "")
+    .replace(/{{\s*full_name\s*}}/g, replacements.full_name)
+    .replace(/{{\s*event_name\s*}}/g, replacements.event_name)
+    .replace(/{{\s*rsvp_link\s*}}/g, replacements.rsvp_link);
+}
 
 const BASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -26,6 +48,10 @@ export default function DashboardPage() {
   const [guests, setGuests] = useState([]);
   const [timingMode, setTimingMode] = useState("standard"); // 'standard' or 'fast-demo'
   const [stageWindowMinutes, setStageWindowMinutes] = useState(2880); // default 48h
+  const [selectedGuest, setSelectedGuest] = useState(null);
+  const [guestToken, setGuestToken] = useState(null);
+  const [guestInvites, setGuestInvites] = useState([]);
+  const [loadingGuestDetails, setLoadingGuestDetails] = useState(false);
 
   // --- Event Settings Save Handler ---
   async function handleSaveSettings() {
@@ -203,7 +229,7 @@ export default function DashboardPage() {
       // Fetch event summary and stats from new backend view or RPC
       const { data: initialEventData } = await supabase
         .from("gala_events")
-        .select("*, email_template_founders, email_template_default")
+        .select("*, email_template_founders, email_template_default, email_template_tier1, email_template_tier2, email_template_reminder, email_subject_founders, email_subject_tier1, email_subject_tier2, email_subject_reminder, reminder_max_per_stage")
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -230,7 +256,7 @@ export default function DashboardPage() {
 
         const { data: refreshedEventData } = await supabase
           .from("gala_events")
-          .select("*, email_template_founders, email_template_default")
+          .select("*, email_template_founders, email_template_default, email_template_tier1, email_template_tier2, email_template_reminder, email_subject_founders, email_subject_tier1, email_subject_tier2, email_subject_reminder, reminder_max_per_stage")
           .eq("id", eventData.id)
           .maybeSingle();
 
@@ -255,7 +281,7 @@ export default function DashboardPage() {
       if (eventData?.id) {
         const { data: guestData } = await supabase
           .from("gala_guests")
-          .select("id, full_name, email, tier, status")
+          .select("id, full_name, email, tier, status, reminder_count, last_reminder_at, last_reminder_stage")
           .eq("event_id", eventData.id)
           .order("id", { ascending: true });
         setGuests(guestData || []);
@@ -351,7 +377,7 @@ export default function DashboardPage() {
       // Reset all guest statuses for this event
       const { error: guestError } = await supabase
         .from("gala_guests")
-        .update({ status: "not_invited" })
+        .update({ status: "not_invited", reminder_count: 0, last_reminder_at: null, last_reminder_stage: null })
         .eq("event_id", event.id);
       if (guestError) throw guestError;
 
@@ -418,11 +444,81 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleAddToWaitlist(guest) {
+    setActionMsg("");
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from("gala_guests")
+        .update({ status: "waitlisted" })
+        .eq("id", guest.id);
+      if (error) throw error;
+      setActionMsg("Guest added to waitlist.");
+      await loadDashboard();
+    } catch (err) {
+      setActionMsg(err.message || "Failed to add to waitlist.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRemoveFromWaitlist(guest) {
+    setActionMsg("");
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from("gala_guests")
+        .update({ status: "not_invited" })
+        .eq("id", guest.id);
+      if (error) throw error;
+      setActionMsg("Guest removed from waitlist.");
+      await loadDashboard();
+    } catch (err) {
+      setActionMsg(err.message || "Failed to remove from waitlist.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function openGuestDetails(guest) {
+    setSelectedGuest(guest);
+    setGuestToken(null);
+    setGuestInvites([]);
+    setLoadingGuestDetails(true);
+    try {
+      const { data: tokenRow } = await supabase
+        .from("gala_rsvp_tokens")
+        .select("token, used, expires_at")
+        .eq("guest_id", guest.id)
+        .maybeSingle();
+      setGuestToken(tokenRow || null);
+
+      const { data: inviteRows } = await supabase
+        .from("gala_invites")
+        .select("id, subject, delivery_status, sent_at")
+        .eq("guest_id", guest.id)
+        .order("sent_at", { ascending: false })
+        .limit(5);
+      setGuestInvites(inviteRows || []);
+    } catch (err) {
+      setActionMsg(err.message || "Failed to load guest details.");
+    } finally {
+      setLoadingGuestDetails(false);
+    }
+  }
+
   // --- Send Invitation Handler ---
   async function handleSendInvitation(guest) {
     setActionMsg("");
     setLoading(true);
     try {
+      if (guest.status === "waitlisted") {
+        const { error: waitlistError } = await supabase
+          .from("gala_guests")
+          .update({ status: "not_invited" })
+          .eq("id", guest.id);
+        if (waitlistError) throw waitlistError;
+      }
       const res = await fetch(`${BASE_URL}/functions/v1/admin-gala`, {
         method: "POST",
         headers: {
@@ -583,6 +679,8 @@ export default function DashboardPage() {
                 <th style={{ padding: 8, border: '1px solid #eee', textAlign: 'left' }}>Email</th>
                 <th style={{ padding: 8, border: '1px solid #eee', textAlign: 'left' }}>Tier</th>
                 <th style={{ padding: 8, border: '1px solid #eee', textAlign: 'left' }}>Status</th>
+                <th style={{ padding: 8, border: '1px solid #eee', textAlign: 'left' }}>Reminder</th>
+                <th style={{ padding: 8, border: '1px solid #eee', textAlign: 'left' }}>Last Reminder</th>
                 <th style={{ padding: 8, border: '1px solid #eee', textAlign: 'left' }}>Actions</th>
               </tr>
             </thead>
@@ -595,11 +693,25 @@ export default function DashboardPage() {
                     {getTierLabel(g.tier)}{' '}
                     <button style={{ marginLeft: 6, fontSize: 13, padding: '2px 8px', borderRadius: 4, border: '1px solid #2563eb', background: '#fff', color: '#2563eb', cursor: 'pointer' }} onClick={() => handleEditTier(g)}>Edit</button>
                   </td>
-                  <td style={{ padding: 8, border: '1px solid #eee' }}>{g.status || '—'}</td>
+                  <td style={{ padding: 8, border: '1px solid #eee' }}>{getStatusLabel(g.status)}</td>
+                  <td style={{ padding: 8, border: '1px solid #eee' }}>{g.reminder_count ?? 0}</td>
+                  <td style={{ padding: 8, border: '1px solid #eee' }}>{formatDateTime(g.last_reminder_at)}</td>
                   <td style={{ padding: 8, border: '1px solid #eee' }}>
+                    <button style={{ fontSize: 13, padding: '2px 10px', borderRadius: 4, border: '1px solid #64748b', background: '#fff', color: '#334155', cursor: 'pointer', marginRight: 6 }} onClick={() => openGuestDetails(g)}>
+                      Details
+                    </button>
                     <button style={{ fontSize: 13, padding: '2px 10px', borderRadius: 4, border: '1px solid #2563eb', background: '#2563eb', color: '#fff', cursor: 'pointer', marginRight: 6 }} onClick={() => handleSendInvitation(g)}>
                       Send Invitation
                     </button>
+                    {g.status !== "waitlisted" ? (
+                      <button style={{ fontSize: 13, padding: '2px 10px', borderRadius: 4, border: '1px solid #0ea5e9', background: '#fff', color: '#0ea5e9', cursor: 'pointer', marginRight: 6 }} onClick={() => handleAddToWaitlist(g)}>
+                        Add to Waitlist
+                      </button>
+                    ) : (
+                      <button style={{ fontSize: 13, padding: '2px 10px', borderRadius: 4, border: '1px solid #0ea5e9', background: '#fff', color: '#0ea5e9', cursor: 'pointer', marginRight: 6 }} onClick={() => handleRemoveFromWaitlist(g)}>
+                        Remove Waitlist
+                      </button>
+                    )}
                     <button style={{ fontSize: 13, padding: '2px 10px', borderRadius: 4, border: '1px solid #b91c1c', background: '#fff', color: '#b91c1c', cursor: 'pointer' }} onClick={() => handleDeleteGuest(g)}>
                       Delete
                     </button>
@@ -611,6 +723,42 @@ export default function DashboardPage() {
         ) : (
           <div style={{ color: '#aaa', marginTop: 18 }}>No guests yet.</div>
         )}
+
+        {/* Waitlist Section */}
+        <div style={{ marginTop: 24, padding: 16, background: "#fff", borderRadius: 10, border: "1px solid #eee" }}>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Waitlist</div>
+          {guests.filter(g => g.status === "waitlisted").length > 0 ? (
+            <table style={{ width: '100%', background: '#fff', borderRadius: 8, borderCollapse: 'collapse', fontSize: 14 }}>
+              <thead>
+                <tr style={{ background: '#f1f5f9' }}>
+                  <th style={{ padding: 8, border: '1px solid #eee', textAlign: 'left' }}>Name</th>
+                  <th style={{ padding: 8, border: '1px solid #eee', textAlign: 'left' }}>Email</th>
+                  <th style={{ padding: 8, border: '1px solid #eee', textAlign: 'left' }}>Tier</th>
+                  <th style={{ padding: 8, border: '1px solid #eee', textAlign: 'left' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {guests.filter(g => g.status === "waitlisted").map(g => (
+                  <tr key={g.id}>
+                    <td style={{ padding: 8, border: '1px solid #eee' }}>{g.full_name || "—"}</td>
+                    <td style={{ padding: 8, border: '1px solid #eee' }}>{g.email || "—"}</td>
+                    <td style={{ padding: 8, border: '1px solid #eee' }}>{getTierLabel(g.tier)}</td>
+                    <td style={{ padding: 8, border: '1px solid #eee' }}>
+                      <button style={{ fontSize: 13, padding: '2px 10px', borderRadius: 4, border: '1px solid #0ea5e9', background: '#fff', color: '#0ea5e9', cursor: 'pointer', marginRight: 6 }} onClick={() => handleRemoveFromWaitlist(g)}>
+                        Remove Waitlist
+                      </button>
+                      <button style={{ fontSize: 13, padding: '2px 10px', borderRadius: 4, border: '1px solid #2563eb', background: '#2563eb', color: '#fff', cursor: 'pointer' }} onClick={() => handleSendInvitation({ ...g, status: "not_invited" })}>
+                        Send Invite
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div style={{ color: "#888", fontSize: 13 }}>No waitlisted guests.</div>
+          )}
+        </div>
         {/* Invitation Message Preview Card (rendered once) */}
         <InvitationPreviewCard event={event} />
       </div>
@@ -653,6 +801,16 @@ export default function DashboardPage() {
 
       {actionMsg && (
         <div style={{ marginTop: 24, color: "#b91c1c", fontWeight: 500 }}>{actionMsg}</div>
+      )}
+      {selectedGuest && (
+        <GuestDetailModal
+          guest={selectedGuest}
+          event={event}
+          token={guestToken}
+          invites={guestInvites}
+          loading={loadingGuestDetails}
+          onClose={() => setSelectedGuest(null)}
+        />
       )}
     </div>
   );
@@ -697,6 +855,9 @@ function InvitationProgressCard({ event, stats, stage }) {
         <b>No Response Yet:</b> {stats?.pending_count ?? "—"}
       </div>
       <div style={{ marginBottom: 8 }}>
+        <b>Waitlisted:</b> {stats?.waitlisted_count ?? "—"}
+      </div>
+      <div style={{ marginBottom: 8 }}>
         <b>Total Seats Confirmed:</b> {stats?.accepted_seats ?? "—"}
       </div>
       <div>
@@ -711,6 +872,7 @@ function FinalReportSection({ stats, guests }) {
   const attending = guests.filter(g => g.status === "accepted");
   const declined = guests.filter(g => g.status === "declined");
   const noResponse = guests.filter(g => !g.status || g.status === "pending");
+  const waitlisted = guests.filter(g => g.status === "waitlisted");
   const totalSeats = stats?.accepted_seats ?? attending.length;
   const totalGuests = guests.length;
 
@@ -740,6 +902,7 @@ function FinalReportSection({ stats, guests }) {
       <div style={{ marginBottom: 8 }}><b>Attending:</b> {attending.length}</div>
       <div style={{ marginBottom: 8 }}><b>Declined:</b> {declined.length}</div>
       <div style={{ marginBottom: 8 }}><b>No Response:</b> {noResponse.length}</div>
+      <div style={{ marginBottom: 8 }}><b>Waitlisted:</b> {waitlisted.length}</div>
       <div style={{ marginBottom: 8 }}><b>Seats Confirmed:</b> {totalSeats}</div>
       <div style={{ marginBottom: 8 }}><b>Total Guests Processed:</b> {totalGuests}</div>
       <button style={{ marginTop: 12, padding: '6px 16px', borderRadius: 6, border: '1px solid #2563eb', background: '#2563eb', color: '#fff', fontWeight: 600, cursor: 'pointer' }} onClick={exportCSV}>
@@ -766,12 +929,16 @@ function InvitationPreviewCard({ event }) {
     <div style={{ background: '#fff', border: '1px solid #eee', borderRadius: 12, padding: 18, marginBottom: 32 }}>
       <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Invitation Message Preview</div>
       <div style={{ marginBottom: 8 }}>
-        <b>Subject:</b> <span style={{ color: '#2563eb' }}>{subject}</span>
+        <b>Subject:</b> <span style={{ color: '#2563eb' }}>{buildPreviewTemplate(subject, { full_name: "Guest Name", event_name: event?.name || "Gala Event", rsvp_link: "https://galademo.netlify.app/rsvp/your-token" })}</span>
       </div>
       <div style={{ marginBottom: 8 }}>
-        <b>Body Template:</b>
-        <div style={{ background: '#f8fafc', border: '1px solid #eee', borderRadius: 6, padding: 12, marginTop: 4, fontFamily: 'monospace', whiteSpace: 'pre-wrap', color: '#333' }}>
-          {bodyTemplate}
+        <b>Email Preview:</b>
+        <div style={{ background: '#f8fafc', border: '1px solid #eee', borderRadius: 6, padding: 12, marginTop: 4 }}>
+          <div style={{ background: '#fff', borderRadius: 6, padding: 12 }} dangerouslySetInnerHTML={{ __html: buildPreviewTemplate(bodyTemplate, {
+            full_name: "Guest Name",
+            event_name: event?.name || "Gala Event",
+            rsvp_link: "https://galademo.netlify.app/rsvp/your-token"
+          }) }} />
         </div>
       </div>
       <div style={{ marginBottom: 8 }}>
@@ -783,8 +950,98 @@ function InvitationPreviewCard({ event }) {
         </select>
       </div>
       <div style={{ color: '#666', fontSize: 13, marginTop: 8 }}>
-        Placeholders <b>{`{{full_name}}`}</b>, <b>{`{{event_name}}`}</b>, and <b>{`{{rsvp_link}}`}</b> are filled automatically for each guest.<br/>
+        The guest’s name, event name, and RSVP link are filled in automatically when the email is sent.<br/>
         Each guest gets one unique RSVP link in the format <b>/rsvp/:token</b>.
+      </div>
+    </div>
+  );
+}
+
+function GuestDetailModal({ guest, event, token, invites, loading, onClose }) {
+  const sample = {
+    full_name: guest.full_name || "Guest Name",
+    event_name: event?.name || "Gala Event",
+    rsvp_link: token?.token ? `${window.location.origin}/rsvp/${token.token}` : "https://example.com/rsvp/your-token",
+  };
+
+  const subject = guest.tier === "founder"
+    ? event?.email_subject_founders
+    : guest.tier === "tier2"
+      ? event?.email_subject_tier2
+      : event?.email_subject_tier1;
+
+  const template = guest.tier === "founder"
+    ? event?.email_template_founders
+    : guest.tier === "tier2"
+      ? event?.email_template_tier2 || event?.email_template_default
+      : event?.email_template_tier1 || event?.email_template_default;
+
+  const previewHtml = buildPreviewTemplate(template, sample);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#0006", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000 }}>
+      <div style={{ width: "90%", maxWidth: 900, background: "#fff", borderRadius: 12, padding: 20, position: "relative" }}>
+        <button onClick={onClose} style={{ position: "absolute", right: 12, top: 12, background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#888" }}>×</button>
+        <h2 style={{ marginTop: 0 }}>Guest Details</h2>
+        {loading ? (
+          <div>Loading details...</div>
+        ) : (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+              <div><b>Name:</b> {guest.full_name}</div>
+              <div><b>Email:</b> {guest.email}</div>
+              <div><b>Tier:</b> {getTierLabel(guest.tier)}</div>
+              <div><b>Status:</b> {getStatusLabel(guest.status)}</div>
+              <div><b>Reminder Count:</b> {guest.reminder_count ?? 0}</div>
+              <div><b>Last Reminder:</b> {formatDateTime(guest.last_reminder_at)}</div>
+              <div><b>RSVP Token:</b> {token?.token || "—"}</div>
+              <div><b>Token Expires:</b> {formatDateTime(token?.expires_at)}</div>
+            </div>
+            {token?.token && (
+              <button
+                style={{ marginBottom: 16, padding: "6px 12px", borderRadius: 6, border: "1px solid #2563eb", background: "#2563eb", color: "#fff", fontWeight: 600, cursor: "pointer" }}
+                onClick={() => navigator.clipboard.writeText(`${window.location.origin}/rsvp/${token.token}`)}
+              >
+                Copy RSVP Link
+              </button>
+            )}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontWeight: 600, marginBottom: 8 }}>Invite History</div>
+              {invites?.length ? (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+                  <thead>
+                    <tr style={{ background: "#f1f5f9" }}>
+                      <th style={{ padding: 8, border: "1px solid #eee", textAlign: "left" }}>Subject</th>
+                      <th style={{ padding: 8, border: "1px solid #eee", textAlign: "left" }}>Status</th>
+                      <th style={{ padding: 8, border: "1px solid #eee", textAlign: "left" }}>Sent</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invites.map(row => (
+                      <tr key={row.id}>
+                        <td style={{ padding: 8, border: "1px solid #eee" }}>{row.subject}</td>
+                        <td style={{ padding: 8, border: "1px solid #eee" }}>{row.delivery_status}</td>
+                        <td style={{ padding: 8, border: "1px solid #eee" }}>{formatDateTime(row.sent_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={{ color: "#888", fontSize: 13 }}>No invite history.</div>
+              )}
+            </div>
+            <div style={{ marginBottom: 8, fontWeight: 600 }}>Invitation Preview</div>
+            <div style={{ marginBottom: 8 }}>
+              <b>Subject:</b> <span style={{ color: "#2563eb" }}>{buildPreviewTemplate(subject, sample)}</span>
+            </div>
+            <div style={{ border: "1px solid #eee", borderRadius: 8, padding: 12, background: "#f8fafc" }}>
+              <div style={{ background: "#fff", borderRadius: 8, padding: 12 }} dangerouslySetInnerHTML={{ __html: previewHtml }} />
+            </div>
+            <div style={{ color: "#666", fontSize: 12, marginTop: 8 }}>
+              The guest’s name, event name, and RSVP link are filled in automatically when the email is sent.
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

@@ -80,6 +80,7 @@ export default function GuestManagementSection({ event }) {
           <option value="accepted">Accepted</option>
           <option value="declined">Declined</option>
           <option value="pending">Pending</option>
+          <option value="waitlisted">Waitlisted</option>
         </select>
         {/* Add Guest and Upload CSV buttons (triggered by DashboardPage) */}
         <button id="guest-mgmt-add-guest" style={{ display: "none" }} />
@@ -100,6 +101,8 @@ export default function GuestManagementSection({ event }) {
                 <th>Status</th>
                 <th>Seats</th>
                 <th>RSVP At</th>
+                <th>Reminder Count</th>
+                <th>Last Reminder</th>
               </tr>
             </thead>
             <tbody>
@@ -111,6 +114,8 @@ export default function GuestManagementSection({ event }) {
                   <td>{guest.status}</td>
                   <td>{guest.seat_count || 1}</td>
                   <td>{guest.rsvp_at ? new Date(guest.rsvp_at).toLocaleString() : "—"}</td>
+                  <td>{guest.reminder_count ?? 0}</td>
+                  <td>{guest.last_reminder_at ? new Date(guest.last_reminder_at).toLocaleString() : "—"}</td>
                 </tr>
               ))}
             </tbody>

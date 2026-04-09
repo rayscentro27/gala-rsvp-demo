@@ -7,10 +7,13 @@ insert into public.gala_events (
   email_subject_founders,
   email_subject_tier1,
   email_subject_tier2,
+  email_subject_reminder,
   email_template_founders,
   email_template_default,
   email_template_tier1,
-  email_template_tier2
+  email_template_tier2,
+  email_template_reminder,
+  reminder_max_per_stage
 )
 values (
   '11111111-1111-1111-1111-111111111111',
@@ -21,10 +24,13 @@ values (
   'You’re Invited — Priority Access to {{event_name}}',
   'You’re Invited to {{event_name}}',
   'Final Invitation — {{event_name}}',
+  'Reminder — Please Confirm Your Attendance',
   E'<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 24px;">\n  <p style="margin: 0 0 16px;">Hi {{full_name}},</p>\n  <p style="margin: 0 0 16px;">We’d love to personally invite you to <strong>{{event_name}}</strong>.</p>\n  <p style="margin: 0 0 16px;">As one of our selected <strong>Ambassadors</strong>, you have early access to reserve your spot before invitations are opened to others.</p>\n  <p style="margin: 0 0 24px;">Please let us know as soon as possible if you’ll be attending.</p>\n  <div style="margin: 0 0 24px;">\n    <a href="{{rsvp_link}}" style="display: inline-block; background: #111827; color: #ffffff; text-decoration: none; padding: 14px 22px; border-radius: 8px; font-weight: 600;">Confirm Your Attendance</a>\n  </div>\n  <p style="margin: 0 0 8px; color: #4b5563;">If the button above does not open, please use this link:</p>\n  <p style="margin: 0 0 24px;"><a href="{{rsvp_link}}" style="color: #2563eb;">{{rsvp_link}}</a></p>\n  <p style="margin: 0;">Warm regards,<br />Gala Team</p>\n</div>',
   E'<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 24px;">\n  <p style="margin: 0 0 16px;">Hi {{full_name}},</p>\n  <p style="margin: 0 0 16px;">You’re invited to join us for <strong>{{event_name}}</strong>.</p>\n  <p style="margin: 0 0 16px;">We’d be delighted to have you attend.</p>\n  <p style="margin: 0 0 24px;">Please let us know as soon as possible if you’ll be joining us so we can plan accordingly.</p>\n  <div style="margin: 0 0 24px;">\n    <a href="{{rsvp_link}}" style="display: inline-block; background: #111827; color: #ffffff; text-decoration: none; padding: 14px 22px; border-radius: 8px; font-weight: 600;">Confirm Your Attendance</a>\n  </div>\n  <p style="margin: 0 0 8px; color: #4b5563;">If the button above does not open, please use this link:</p>\n  <p style="margin: 0 0 24px;"><a href="{{rsvp_link}}" style="color: #2563eb;">{{rsvp_link}}</a></p>\n  <p style="margin: 0;">Best regards,<br />Gala Team</p>\n</div>',
   E'<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 24px;">\n  <p style="margin: 0 0 16px;">Hi {{full_name}},</p>\n  <p style="margin: 0 0 16px;">You’re invited to join us for <strong>{{event_name}}</strong>.</p>\n  <p style="margin: 0 0 16px;">We’d be delighted to have you attend.</p>\n  <p style="margin: 0 0 24px;">Please let us know as soon as possible if you’ll be joining us so we can plan accordingly.</p>\n  <div style="margin: 0 0 24px;">\n    <a href="{{rsvp_link}}" style="display: inline-block; background: #111827; color: #ffffff; text-decoration: none; padding: 14px 22px; border-radius: 8px; font-weight: 600;">Confirm Your Attendance</a>\n  </div>\n  <p style="margin: 0 0 8px; color: #4b5563;">If the button above does not open, please use this link:</p>\n  <p style="margin: 0 0 24px;"><a href="{{rsvp_link}}" style="color: #2563eb;">{{rsvp_link}}</a></p>\n  <p style="margin: 0;">Best regards,<br />Gala Team</p>\n</div>',
-  E'<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 24px;">\n  <p style="margin: 0 0 16px;">Hi {{full_name}},</p>\n  <p style="margin: 0 0 16px;">We’re reaching out with a final opportunity to attend <strong>{{event_name}}</strong>.</p>\n  <p style="margin: 0 0 16px;">If you’d like to join us, please confirm your attendance as soon as possible so we can finalize arrangements.</p>\n  <div style="margin: 0 0 24px;">\n    <a href="{{rsvp_link}}" style="display: inline-block; background: #111827; color: #ffffff; text-decoration: none; padding: 14px 22px; border-radius: 8px; font-weight: 600;">Confirm Your Attendance</a>\n  </div>\n  <p style="margin: 0 0 8px; color: #4b5563;">If the button above does not open, please use this link:</p>\n  <p style="margin: 0 0 24px;"><a href="{{rsvp_link}}" style="color: #2563eb;">{{rsvp_link}}</a></p>\n  <p style="margin: 0;">Best regards,<br />Gala Team</p>\n</div>'
+  E'<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 24px;">\n  <p style="margin: 0 0 16px;">Hi {{full_name}},</p>\n  <p style="margin: 0 0 16px;">We’re reaching out with a final opportunity to attend <strong>{{event_name}}</strong>.</p>\n  <p style="margin: 0 0 16px;">If you’d like to join us, please confirm your attendance as soon as possible so we can finalize arrangements.</p>\n  <div style="margin: 0 0 24px;">\n    <a href="{{rsvp_link}}" style="display: inline-block; background: #111827; color: #ffffff; text-decoration: none; padding: 14px 22px; border-radius: 8px; font-weight: 600;">Confirm Your Attendance</a>\n  </div>\n  <p style="margin: 0 0 8px; color: #4b5563;">If the button above does not open, please use this link:</p>\n  <p style="margin: 0 0 24px;"><a href="{{rsvp_link}}" style="color: #2563eb;">{{rsvp_link}}</a></p>\n  <p style="margin: 0;">Best regards,<br />Gala Team</p>\n</div>',
+  E'<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 24px;">\n  <p style="margin: 0 0 16px;">Hi {{full_name}},</p>\n  <p style="margin: 0 0 16px;">We wanted to send a quick reminder to confirm your attendance for <strong>{{event_name}}</strong>.</p>\n  <p style="margin: 0 0 16px;">If you plan to attend, please let us know as soon as possible so we can plan accordingly.</p>\n  <div style="margin: 0 0 24px;">\n    <a href="{{rsvp_link}}" style="display: inline-block; background: #111827; color: #ffffff; text-decoration: none; padding: 14px 22px; border-radius: 8px; font-weight: 600;">Confirm Your Attendance</a>\n  </div>\n  <p style="margin: 0 0 8px; color: #4b5563;">If the button above does not open, please use this link:</p>\n  <p style="margin: 0 0 24px;"><a href="{{rsvp_link}}" style="color: #2563eb;">{{rsvp_link}}</a></p>\n  <p style="margin: 0;">Thank you,<br />Gala Team</p>\n</div>',
+  1
 )
 on conflict (id) do update
 set
@@ -35,10 +41,13 @@ set
   email_subject_founders = excluded.email_subject_founders,
   email_subject_tier1 = excluded.email_subject_tier1,
   email_subject_tier2 = excluded.email_subject_tier2,
+  email_subject_reminder = excluded.email_subject_reminder,
   email_template_founders = excluded.email_template_founders,
   email_template_default = excluded.email_template_default,
   email_template_tier1 = excluded.email_template_tier1,
-  email_template_tier2 = excluded.email_template_tier2;
+  email_template_tier2 = excluded.email_template_tier2,
+  email_template_reminder = excluded.email_template_reminder,
+  reminder_max_per_stage = excluded.reminder_max_per_stage;
 
 insert into public.gala_guests (event_id, full_name, email, tier, status, founder_allowance)
 values

@@ -126,6 +126,20 @@ const FALLBACK_TEMPLATES = {
   <p style="margin: 0;">Best regards,<br />Gala Team</p>
 </div>`,
   },
+  reminder: {
+    subject: "Reminder — Please Confirm Your Attendance",
+    body: `<div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.6; max-width: 600px; margin: 0 auto; padding: 24px;">
+  <p style="margin: 0 0 16px;">Hi {{full_name}},</p>
+  <p style="margin: 0 0 16px;">We wanted to send a quick reminder to confirm your attendance for <strong>{{event_name}}</strong>.</p>
+  <p style="margin: 0 0 16px;">If you plan to attend, please let us know as soon as possible so we can plan accordingly.</p>
+  <div style="margin: 0 0 24px;">
+    <a href="{{rsvp_link}}" style="display: inline-block; background: #111827; color: #ffffff; text-decoration: none; padding: 14px 22px; border-radius: 8px; font-weight: 600;">Confirm Your Attendance</a>
+  </div>
+  <p style="margin: 0 0 8px; color: #4b5563;">If the button above does not open, please use this link:</p>
+  <p style="margin: 0 0 24px;"><a href="{{rsvp_link}}" style="color: #2563eb;">{{rsvp_link}}</a></p>
+  <p style="margin: 0;">Thank you,<br />Gala Team</p>
+</div>`,
+  },
 };
 
 export function getInvitationContent(
@@ -179,11 +193,139 @@ export function getInvitationContent(
   };
 }
 
+export function getReminderContent(
+  event: Record<string, unknown>,
+  guest: Record<string, unknown>,
+  rsvpLink: string,
+) {
+  const values = {
+    full_name: String(guest.full_name ?? "Guest"),
+    event_name: String(event.name ?? "Gala Event"),
+    rsvp_link: rsvpLink,
+  };
+  const subject = renderTemplate(
+    String(event.email_subject_reminder ?? FALLBACK_TEMPLATES.reminder.subject),
+    values,
+  );
+  let body = renderTemplate(
+    String(event.email_template_reminder ?? FALLBACK_TEMPLATES.reminder.body),
+    values,
+  );
+  const isHtml = /<[^>]+>/.test(body);
+
+  const unsubscribeUrl = Deno.env.get("PUBLIC_UNSUBSCRIBE_URL");
+  const footerText = `You are receiving this email because you were invited to ${values.event_name}.\nIf this was a mistake, reply to this email${unsubscribeUrl ? ` or unsubscribe here: ${unsubscribeUrl}` : ""}.`;
+  const footerHtml = `<hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" /><p style="margin:0;color:#6b7280;font-size:12px;">You are receiving this email because you were invited to ${values.event_name}. If this was a mistake, reply to this email${unsubscribeUrl ? ` or <a href="${unsubscribeUrl}" style="color:#2563eb;">unsubscribe</a>.` : "."}</p>`;
+
+  if (isHtml) {
+    body = `${body}${footerHtml}`;
+  } else {
+    body = `${body}\n\n${footerText}`;
+  }
+
+  return {
+    subject,
+    body,
+    html: isHtml ? body : undefined,
+    text: isHtml ? stripHtml(body) : body,
+  };
+}
+
+export function getStageWindowForGuest(event: Record<string, unknown>, guest: Record<string, unknown>) {
+  const startedAt = event.invitations_started_at ? new Date(String(event.invitations_started_at)) : null;
+  const founderEnds = event.founder_window_ends_at ? new Date(String(event.founder_window_ends_at)) : null;
+  const tier1Ends = event.tier1_window_ends_at ? new Date(String(event.tier1_window_ends_at)) : null;
+  const tier2Ends = event.tier2_window_ends_at ? new Date(String(event.tier2_window_ends_at)) : null;
+
+  if (!startedAt) return null;
+
+  if (guest.tier === "founder" && founderEnds) {
+    return { stage: "founder", start: startedAt, end: founderEnds };
+  }
+  if (guest.tier === "tier1" && founderEnds && tier1Ends) {
+    return { stage: "tier1", start: founderEnds, end: tier1Ends };
+  }
+  if ((guest.tier === "tier2" || guest.tier === "public") && tier1Ends && tier2Ends) {
+    return { stage: "tier2", start: tier1Ends, end: tier2Ends };
+  }
+  return null;
+}
+
+export async function processReminderEmails(
+  supabase: ReturnType<typeof createAdminClient>,
+  event: Record<string, unknown>,
+) {
+  if (!event.invitations_started_at || event.completed_at) return { ok: true };
+
+  const { data: invitedGuests, error: guestError } = await supabase
+    .from("gala_guests")
+    .select("*")
+    .eq("event_id", event.id)
+    .eq("status", "invited");
+
+  if (guestError) return { error: guestError.message };
+
+  const now = new Date();
+  const maxPerStage = Number(event.reminder_max_per_stage ?? 1) || 1;
+
+  for (const guest of invitedGuests ?? []) {
+    if (maxPerStage <= 0) continue;
+    const stageWindow = getStageWindowForGuest(event, guest);
+    if (!stageWindow) continue;
+
+    const { stage, start, end } = stageWindow;
+    if (now < start || now > end) continue;
+
+    const midpoint = new Date(start.getTime() + (end.getTime() - start.getTime()) / 2);
+    if (now < midpoint) continue;
+
+    if (guest.last_reminder_stage === stage) continue;
+    if (guest.reminder_count >= maxPerStage) continue;
+
+    const { data: tokenRow } = await supabase
+      .from("gala_rsvp_tokens")
+      .select("token, used")
+      .eq("guest_id", guest.id)
+      .maybeSingle();
+    if (!tokenRow || tokenRow.used) continue;
+
+    const rsvpLink = `${siteUrlFromEnv()}/rsvp/${tokenRow.token}`;
+
+    const reminder = getReminderContent(event, guest, rsvpLink);
+    const sendResult = await sendResendEmail({
+      to: String(guest.email),
+      subject: reminder.subject,
+      text: reminder.text,
+      html: reminder.html,
+    });
+    if (sendResult.error) continue;
+
+    await supabase
+      .from("gala_guests")
+      .update({
+        reminder_count: (guest.reminder_count ?? 0) + 1,
+        last_reminder_at: now.toISOString(),
+        last_reminder_stage: stage,
+      })
+      .eq("id", guest.id);
+  }
+
+  return { ok: true };
+}
+
 export function siteUrlFromRequest(req: Request) {
   return (
     Deno.env.get("PUBLIC_APP_URL") ??
     Deno.env.get("PUBLIC_SITE_URL") ??
     req.headers.get("origin") ??
+    "http://localhost:5173"
+  ).replace(/\/$/, "");
+}
+
+export function siteUrlFromEnv() {
+  return (
+    Deno.env.get("PUBLIC_APP_URL") ??
+    Deno.env.get("PUBLIC_SITE_URL") ??
     "http://localhost:5173"
   ).replace(/\/$/, "");
 }
@@ -262,6 +404,11 @@ export async function syncEventProgress(
 
   if (refreshedEventError || !refreshedEvent) {
     return { error: refreshedEventError?.message ?? "Event not found after sync." };
+  }
+
+  const reminderResult = await processReminderEmails(supabase, refreshedEvent);
+  if (reminderResult.error) {
+    return { error: reminderResult.error };
   }
 
   return { event: refreshedEvent };
