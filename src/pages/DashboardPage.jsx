@@ -22,6 +22,7 @@ export default function DashboardPage() {
   const [showFinal, setShowFinal] = useState(false);
   const [actionMsg, setActionMsg] = useState("");
   const [starting, setStarting] = useState(false);
+  const [advancing, setAdvancing] = useState(false);
   const [guests, setGuests] = useState([]);
   const [timingMode, setTimingMode] = useState("standard"); // 'standard' or 'fast-demo'
   const [stageWindowMinutes, setStageWindowMinutes] = useState(2880); // default 48h
@@ -200,12 +201,13 @@ export default function DashboardPage() {
     setActionMsg("");
     try {
       // Fetch event summary and stats from new backend view or RPC
-      const { data: eventData } = await supabase
+      const { data: initialEventData } = await supabase
         .from("gala_events")
         .select("*, email_template_founders, email_template_default")
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+      let eventData = initialEventData;
       setEvent(eventData);
 
       // Set timing mode and window
@@ -217,6 +219,26 @@ export default function DashboardPage() {
       // Fetch stats for the same event_id as the loaded event
       let statsData = null;
       if (eventData?.id) {
+        await fetch(`${BASE_URL}/functions/v1/advance-gala`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY
+          },
+          body: JSON.stringify({ event_id: eventData.id }),
+        });
+
+        const { data: refreshedEventData } = await supabase
+          .from("gala_events")
+          .select("*, email_template_founders, email_template_default")
+          .eq("id", eventData.id)
+          .maybeSingle();
+
+        if (refreshedEventData) {
+          setEvent(refreshedEventData);
+          eventData = refreshedEventData;
+        }
+
         const { data } = await supabase
           .from("gala_event_stats")
           .select("*")
@@ -244,6 +266,30 @@ export default function DashboardPage() {
       setActionMsg(err.message || "Unable to load dashboard.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleAdvanceStages() {
+    if (!event?.id) return;
+    setAdvancing(true);
+    setActionMsg("");
+    try {
+      const res = await fetch(`${BASE_URL}/functions/v1/advance-gala`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY
+        },
+        body: JSON.stringify({ event_id: event.id }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to advance stages.");
+      setActionMsg("Stage progression checked.");
+      await loadDashboard();
+    } catch (err) {
+      setActionMsg(err.message || "Failed to advance stages.");
+    } finally {
+      setAdvancing(false);
     }
   }
 
@@ -492,6 +538,13 @@ export default function DashboardPage() {
       {/* Reset Event Button */}
       <div style={{ marginBottom: 16, textAlign: 'right' }}>
         <button
+          style={{ background: '#fff', color: '#2563eb', fontWeight: 600, border: '1px solid #2563eb', borderRadius: 6, padding: '8px 20px', cursor: 'pointer', marginRight: 8 }}
+          onClick={handleAdvanceStages}
+          disabled={advancing}
+        >
+          {advancing ? "Checking..." : "Advance Stages"}
+        </button>
+        <button
           style={{ background: '#b91c1c', color: '#fff', fontWeight: 600, border: 'none', borderRadius: 6, padding: '8px 20px', cursor: 'pointer' }}
           onClick={handleResetEvent}
         >
@@ -699,16 +752,21 @@ function FinalReportSection({ stats, guests }) {
 function InvitationPreviewCard({ event }) {
   if (!event) return null;
   const [selectedTier, setSelectedTier] = useState("founder");
-  const subject = "You're Invited — Please Confirm Your Attendance";
+  const subject = selectedTier === "founder"
+    ? event.email_subject_founders || "You’re Invited — Priority Access to {{event_name}}"
+    : selectedTier === "tier2"
+      ? event.email_subject_tier2 || "Final Invitation — {{event_name}}"
+      : event.email_subject_tier1 || "You’re Invited to {{event_name}}";
   const bodyTemplate = selectedTier === "founder"
-    ? event.email_template_founders || "[No founder template set]"
-    : event.email_template_default || "[No default template set]";
+    ? event.email_template_founders || "[No ambassador template set]"
+    : selectedTier === "tier2"
+      ? event.email_template_tier2 || event.email_template_default || "[No tier 2 template set]"
+      : event.email_template_tier1 || event.email_template_default || "[No tier 1 template set]";
   return (
     <div style={{ background: '#fff', border: '1px solid #eee', borderRadius: 12, padding: 18, marginBottom: 32 }}>
       <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Invitation Message Preview</div>
       <div style={{ marginBottom: 8 }}>
         <b>Subject:</b> <span style={{ color: '#2563eb' }}>{subject}</span>
-        <span style={{ color: '#888', fontSize: 13, marginLeft: 8 }}>(subject is fixed by backend)</span>
       </div>
       <div style={{ marginBottom: 8 }}>
         <b>Body Template:</b>
@@ -726,7 +784,7 @@ function InvitationPreviewCard({ event }) {
       </div>
       <div style={{ color: '#666', fontSize: 13, marginTop: 8 }}>
         Placeholders <b>{`{{full_name}}`}</b>, <b>{`{{event_name}}`}</b>, and <b>{`{{rsvp_link}}`}</b> are filled automatically for each guest.<br/>
-        The RSVP link uses the format <b>/rsvp/:token</b> and is unique per guest.
+        Each guest gets one unique RSVP link in the format <b>/rsvp/:token</b>.
       </div>
     </div>
   );
