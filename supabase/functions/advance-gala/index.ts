@@ -60,7 +60,7 @@ async function issueInvitation(
   let tokenRow = existingToken;
   if (!tokenRow) {
     const token = crypto.randomUUID();
-    const expiresAt = addMinutes(new Date(), 60 * 24 * 30).toISOString();
+    const expiresAt = addMinutes(new Date(), 60 * 24 * 14).toISOString();
     const { data, error: tokenError } = await supabase
       .from("gala_rsvp_tokens")
       .insert({

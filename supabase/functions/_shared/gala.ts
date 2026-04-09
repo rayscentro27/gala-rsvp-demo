@@ -74,6 +74,13 @@ function stripHtml(html: string) {
     .trim();
 }
 
+function extractEmailAddress(raw: string | null) {
+  if (!raw) return null;
+  const match = raw.match(/<([^>]+)>/);
+  if (match) return match[1].trim();
+  return raw.trim();
+}
+
 const FALLBACK_TEMPLATES = {
   founder: {
     subject: "You’re Invited — Priority Access to {{event_name}}",
@@ -151,8 +158,18 @@ export function getInvitationContent(
     rsvp_link: rsvpLink,
   };
   const subject = renderTemplate(templateConfig.subject, values);
-  const body = renderTemplate(templateConfig.body, values);
+  let body = renderTemplate(templateConfig.body, values);
   const isHtml = /<[^>]+>/.test(body);
+
+  const unsubscribeUrl = Deno.env.get("PUBLIC_UNSUBSCRIBE_URL");
+  const footerText = `You are receiving this email because you were invited to ${values.event_name}.\nIf this was a mistake, reply to this email${unsubscribeUrl ? ` or unsubscribe here: ${unsubscribeUrl}` : ""}.`;
+  const footerHtml = `<hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" /><p style="margin:0;color:#6b7280;font-size:12px;">You are receiving this email because you were invited to ${values.event_name}. If this was a mistake, reply to this email${unsubscribeUrl ? ` or <a href="${unsubscribeUrl}" style="color:#2563eb;">unsubscribe</a>.` : "."}</p>`;
+
+  if (isHtml) {
+    body = `${body}${footerHtml}`;
+  } else {
+    body = `${body}\n\n${footerText}`;
+  }
 
   return {
     subject,
@@ -260,6 +277,10 @@ export type ResendEmailPayload = {
 export async function sendResendEmail(payload: ResendEmailPayload) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   const from = Deno.env.get("RESEND_FROM");
+  const unsubscribeUrl = Deno.env.get("PUBLIC_UNSUBSCRIBE_URL");
+  const unsubscribeEmail = extractEmailAddress(
+    Deno.env.get("RESEND_LIST_UNSUBSCRIBE_EMAIL") ?? from ?? "",
+  );
 
   if (!apiKey) {
     return { error: "Missing RESEND_API_KEY secret." };
@@ -269,6 +290,12 @@ export async function sendResendEmail(payload: ResendEmailPayload) {
   }
 
   const html = payload.html ?? payload.text.replace(/\n/g, "<br />");
+  const listUnsubscribeParts = [];
+  if (unsubscribeEmail) listUnsubscribeParts.push(`<mailto:${unsubscribeEmail}>`);
+  if (unsubscribeUrl) listUnsubscribeParts.push(`<${unsubscribeUrl}>`);
+  const headers = listUnsubscribeParts.length > 0
+    ? { "List-Unsubscribe": listUnsubscribeParts.join(", ") }
+    : undefined;
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -282,6 +309,7 @@ export async function sendResendEmail(payload: ResendEmailPayload) {
       subject: payload.subject,
       text: payload.text,
       html,
+      headers,
     }),
   });
 

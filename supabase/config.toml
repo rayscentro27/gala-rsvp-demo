@@ -227,6 +227,10 @@ otp_expiry = 3600
 # subject = "You have been invited"
 # content_path = "./supabase/templates/invite.html"
 
+# Optional: List-unsubscribe support for outbound invites (Resend)
+# PUBLIC_UNSUBSCRIBE_URL = "https://yourdomain.com/unsubscribe"
+# RESEND_LIST_UNSUBSCRIBE_EMAIL = "unsubscribe@yourdomain.com"
+
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
 # enabled = true
