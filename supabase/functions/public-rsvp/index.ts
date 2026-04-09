@@ -2,6 +2,7 @@ import {
   addMinutes,
   createAdminClient,
   getInvitationContent,
+  getThankYouContent,
   isOptions,
   json,
   normalizeSeatCount,
@@ -125,6 +126,20 @@ async function submitRsvp(req: Request, token: string | null, response: string |
     (currentEvent, guestId) => issueInvitation(req, supabase, currentEvent, guestId),
   );
   if (synced.error) return json({ error: synced.error }, 500);
+
+  if (guest.email) {
+    const rsvpLink = `${siteUrlFromRequest(req)}/rsvp/${tokenRow.token}`;
+    const thankYou = getThankYouContent(event, guest, rsvpLink);
+    const sendResult = await sendResendEmail({
+      to: String(guest.email),
+      subject: thankYou.subject,
+      text: thankYou.text,
+      html: thankYou.html,
+    });
+    if (sendResult.error) {
+      console.error("Thank-you email failed:", sendResult.error);
+    }
+  }
 
   return json({ ok: true, response, seat_count: seatCount });
 }
