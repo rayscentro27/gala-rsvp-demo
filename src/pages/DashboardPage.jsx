@@ -34,6 +34,15 @@ function buildPreviewTemplate(template, replacements) {
 }
 
 const BASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const UI = {
+  bg: "#f9fafb",
+  card: "#ffffff",
+  border: "#e5e7eb",
+  text: "#111827",
+  muted: "#6b7280",
+  accent: "#2563eb",
+  dark: "#111827",
+};
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
