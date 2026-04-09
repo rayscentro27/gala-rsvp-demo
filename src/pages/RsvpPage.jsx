@@ -16,7 +16,13 @@ export default function RsvpPage() {
     async function loadRsvp() {
       try {
         const res = await fetch(
-          `${BASE_URL}/functions/v1/public-rsvp?token=${token}`
+          `${BASE_URL}/functions/v1/public-rsvp?token=${token}`,
+          {
+            headers: {
+              "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY,
+              "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+            }
+          }
         );
         const json = await res.json();
 
@@ -46,6 +52,8 @@ export default function RsvpPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
         },
         body: JSON.stringify({
           token,
