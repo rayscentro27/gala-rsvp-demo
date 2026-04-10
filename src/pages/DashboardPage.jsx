@@ -26,6 +26,23 @@ function getStatusLabel(status) {
   return status || "—";
 }
 
+function getTierBadgeStyle(tier) {
+  if (tier === "founder") return { color: "#6d28d9", background: "#ede9fe" };
+  if (tier === "tier1") return { color: "#1d4ed8", background: "#dbeafe" };
+  if (tier === "tier2") return { color: "#15803d", background: "#dcfce7" };
+  if (tier === "waitlisted") return { color: "#b45309", background: "#fef3c7" };
+  return { color: "#374151", background: "#f3f4f6" };
+}
+
+function getStatusBadgeStyle(status) {
+  if (status === "accepted") return { color: "#15803d", background: "#dcfce7" };
+  if (status === "declined") return { color: "#b91c1c", background: "#fee2e2" };
+  if (status === "waitlisted") return { color: "#b45309", background: "#fef3c7" };
+  if (status === "invited") return { color: "#0369a1", background: "#e0f2fe" };
+  if (status === "not_invited") return { color: "#6b7280", background: "#f3f4f6" };
+  return { color: "#6b7280", background: "#f3f4f6" };
+}
+
 function buildPreviewTemplate(template, replacements) {
   return String(template || "")
     .replace(/{{\s*full_name\s*}}/g, replacements.full_name)
@@ -569,117 +586,117 @@ export default function DashboardPage() {
   return (
     <div style={{ background: UI.bg, minHeight: "100vh" }}>
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "40px 24px 80px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 1.1fr) minmax(260px, 1fr)", gap: 20, alignItems: "start" }}>
           <div>
             <h1 style={{ marginBottom: 8, fontSize: 30, color: UI.text }}>{event?.name || "Gala Event"}</h1>
-            <p style={{ color: UI.muted, marginBottom: 0, maxWidth: 640 }}>
+            <p style={{ color: UI.muted, marginBottom: 16, maxWidth: 640 }}>
               Manage invitations, track responses, and keep your guest list organized in one calm, reliable place.
             </p>
-          </div>
-          {!event?.invitations_started_at && (
-            <button
-              style={{
-                background: UI.dark,
-                color: "#fff",
-                fontWeight: 600,
-                fontSize: 16,
-                border: "none",
-                borderRadius: 999,
-                padding: "12px 22px",
-                cursor: "pointer",
-              }}
-              onClick={startInvitations}
-              disabled={starting}
-            >
-              {starting ? "Starting..." : "Start Guest Invitations"}
-            </button>
-          )}
-        </div>
-        <div style={{ marginTop: 8, color: UI.muted, fontSize: 13 }}>
-          The invitation timer starts after you click Start Guest Invitations.
-        </div>
-
-      {/* Event Summary & Setup */}
-      <div style={{ display: "flex", gap: 20, marginTop: 28, marginBottom: 24, flexWrap: "wrap" }}>
-        <div style={{ flex: 1, minWidth: 260, background: UI.card, borderRadius: 16, padding: 20, border: `1px solid ${UI.border}` }}>
-          <div style={{ fontSize: 13, color: UI.muted, marginBottom: 8 }}>Event Name</div>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>{event?.name || "—"}</div>
-          <div style={{ fontSize: 13, color: UI.muted, marginTop: 12 }}>Total Capacity</div>
-          <div style={{ fontSize: 18 }}>{event?.total_capacity ?? "—"}</div>
-          <div style={{ fontSize: 13, color: UI.muted, marginTop: 12 }}>Ambassador Guest Allowance</div>
-          <div style={{ fontSize: 18 }}>{event?.founder_guest_limit ?? "—"}</div>
-          <div style={{ fontSize: 13, color: UI.muted, marginTop: 12 }}>Stage Timing</div>
-          <div style={{ fontSize: 15, marginBottom: 8 }}>
-            <span style={{ fontWeight: 600 }}>
-              {stageWindowMinutes <= 30 ? "Fast Demo" : "Standard"} ({stageWindowMinutes} minutes)
-            </span>
-            <button style={{ marginLeft: 12, fontSize: 13, padding: '4px 10px', borderRadius: 999, border: `1px solid ${UI.accent}`, background: '#fff', color: UI.accent, cursor: 'pointer' }} onClick={() => setShowSettings(true)}>
-              Edit Event Settings
-            </button>
-          </div>
-          {showSettings && (
-            <div style={{ marginTop: 16, background: '#fff', border: `1px solid ${UI.border}`, borderRadius: 12, padding: 16 }}>
-              <div style={{ fontWeight: 600, marginBottom: 8 }}>Edit Event Settings</div>
-              <label style={{ display: 'block', marginBottom: 8 }}>
-                Event Name:
-                <input
-                  type="text"
-                  value={event?.name || ''}
-                  onChange={e => setEvent({ ...event, name: e.target.value })}
-                  style={{ marginLeft: 8, padding: 6, borderRadius: 8, border: `1px solid ${UI.border}` }}
-                />
-              </label>
-              <label style={{ display: 'block', marginBottom: 8 }}>
-                Total Capacity:
-                <input
-                  type="number"
-                  value={event?.total_capacity || ''}
-                  onChange={e => setEvent({ ...event, total_capacity: parseInt(e.target.value) })}
-                  style={{ marginLeft: 8, padding: 6, borderRadius: 8, border: `1px solid ${UI.border}` }}
-                />
-              </label>
-              <label style={{ display: 'block', marginBottom: 8 }}>
-                Ambassador Guest Allowance:
-                <input
-                  type="number"
-                  value={event?.founder_guest_limit || ''}
-                  onChange={e => setEvent({ ...event, founder_guest_limit: parseInt(e.target.value) })}
-                  style={{ marginLeft: 8, padding: 6, borderRadius: 8, border: `1px solid ${UI.border}` }}
-                />
-              </label>
-              <label style={{ display: 'block', marginBottom: 8 }}>
-                Stage Timing:
-                <select
-                  value={timingMode}
-                  onChange={e => {
-                    const mode = e.target.value;
-                    setTimingMode(mode);
-                    setStageWindowMinutes(mode === "fast-demo" ? 30 : 2880);
-                  }}
-                  style={{ marginLeft: 8, padding: 6, borderRadius: 8, border: `1px solid ${UI.border}` }}
-                >
-                  <option value="standard">Standard (48 hours)</option>
-                  <option value="fast-demo">Fast Demo (30 minutes)</option>
-                </select>
-              </label>
+            {!event?.invitations_started_at && (
               <button
-                style={{ marginTop: 8, padding: '8px 18px', borderRadius: 999, border: `1px solid ${UI.accent}`, background: UI.accent, color: '#fff', fontWeight: 600, cursor: 'pointer' }}
-                onClick={handleSaveSettings}
+                style={{
+                  background: UI.dark,
+                  color: "#fff",
+                  fontWeight: 600,
+                  fontSize: 16,
+                  border: "none",
+                  borderRadius: 999,
+                  padding: "12px 22px",
+                  cursor: "pointer",
+                }}
+                onClick={startInvitations}
+                disabled={starting}
               >
-                Save
+                {starting ? "Starting..." : "Start Guest Invitations"}
               </button>
-              <button
-                style={{ marginLeft: 8, padding: '8px 18px', borderRadius: 999, border: `1px solid ${UI.border}`, background: '#fff', color: '#333', fontWeight: 600, cursor: 'pointer' }}
-                onClick={() => setShowSettings(false)}
-              >
-                Cancel
+            )}
+            <div style={{ marginTop: 8, color: UI.muted, fontSize: 13 }}>
+              The invitation timer starts after you click Start Guest Invitations.
+            </div>
+            <div style={{ marginTop: 10, color: UI.muted, fontSize: 13 }}>
+              Ambassadors may still confirm later if space remains available.
+            </div>
+          </div>
+          <div style={{ flex: 1, minWidth: 260, background: UI.card, borderRadius: 16, padding: 20, border: `1px solid ${UI.border}` }}>
+            <div style={{ fontSize: 13, color: UI.muted, marginBottom: 8 }}>Event Name</div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>{event?.name || "—"}</div>
+            <div style={{ fontSize: 13, color: UI.muted, marginTop: 12 }}>Total Capacity</div>
+            <div style={{ fontSize: 18 }}>{event?.total_capacity ?? "—"}</div>
+            <div style={{ fontSize: 13, color: UI.muted, marginTop: 12 }}>Ambassador Guest Allowance</div>
+            <div style={{ fontSize: 18 }}>{event?.founder_guest_limit ?? "—"}</div>
+            <div style={{ fontSize: 13, color: UI.muted, marginTop: 12 }}>Stage Timing</div>
+            <div style={{ fontSize: 15, marginBottom: 8 }}>
+              <span style={{ fontWeight: 600 }}>
+                {stageWindowMinutes <= 30 ? "Fast Demo" : "Standard"} ({stageWindowMinutes} minutes)
+              </span>
+              <button style={{ marginLeft: 12, fontSize: 13, padding: '4px 10px', borderRadius: 999, border: `1px solid ${UI.accent}`, background: '#fff', color: UI.accent, cursor: 'pointer' }} onClick={() => setShowSettings(true)}>
+                Edit Event Settings
               </button>
             </div>
-          )}
+            {showSettings && (
+              <div style={{ marginTop: 16, background: '#fff', border: `1px solid ${UI.border}`, borderRadius: 12, padding: 16 }}>
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>Edit Event Settings</div>
+                <label style={{ display: 'block', marginBottom: 8 }}>
+                  Event Name:
+                  <input
+                    type="text"
+                    value={event?.name || ''}
+                    onChange={e => setEvent({ ...event, name: e.target.value })}
+                    style={{ marginLeft: 8, padding: 6, borderRadius: 8, border: `1px solid ${UI.border}` }}
+                  />
+                </label>
+                <label style={{ display: 'block', marginBottom: 8 }}>
+                  Total Capacity:
+                  <input
+                    type="number"
+                    value={event?.total_capacity || ''}
+                    onChange={e => setEvent({ ...event, total_capacity: parseInt(e.target.value) })}
+                    style={{ marginLeft: 8, padding: 6, borderRadius: 8, border: `1px solid ${UI.border}` }}
+                  />
+                </label>
+                <label style={{ display: 'block', marginBottom: 8 }}>
+                  Ambassador Guest Allowance:
+                  <input
+                    type="number"
+                    value={event?.founder_guest_limit || ''}
+                    onChange={e => setEvent({ ...event, founder_guest_limit: parseInt(e.target.value) })}
+                    style={{ marginLeft: 8, padding: 6, borderRadius: 8, border: `1px solid ${UI.border}` }}
+                  />
+                </label>
+                <label style={{ display: 'block', marginBottom: 8 }}>
+                  Stage Timing:
+                  <select
+                    value={timingMode}
+                    onChange={e => {
+                      const mode = e.target.value;
+                      setTimingMode(mode);
+                      setStageWindowMinutes(mode === "fast-demo" ? 30 : 2880);
+                    }}
+                    style={{ marginLeft: 8, padding: 6, borderRadius: 8, border: `1px solid ${UI.border}` }}
+                  >
+                    <option value="standard">Standard (48 hours)</option>
+                    <option value="fast-demo">Fast Demo (30 minutes)</option>
+                  </select>
+                </label>
+                <button
+                  style={{ marginTop: 8, padding: '8px 18px', borderRadius: 999, border: `1px solid ${UI.accent}`, background: UI.accent, color: '#fff', fontWeight: 600, cursor: 'pointer' }}
+                  onClick={handleSaveSettings}
+                >
+                  Save
+                </button>
+                <button
+                  style={{ marginLeft: 8, padding: '8px 18px', borderRadius: 999, border: `1px solid ${UI.border}`, background: '#fff', color: '#333', fontWeight: 600, cursor: 'pointer' }}
+                  onClick={() => setShowSettings(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-        <div style={{ flex: 2, minWidth: 320 }}>
-          <InvitationProgressCard event={event} stats={stats} stage={stage} />
-        </div>
+
+      <div style={{ marginTop: 24 }}>
+        <InvitationProgressCard event={event} stats={stats} stage={stage} />
       </div>
 
       {/* Reset Event Button */}
@@ -701,7 +718,7 @@ export default function DashboardPage() {
 
       {/* Guest Management Section */}
       <div style={{ background: UI.card, borderRadius: 16, padding: 20, border: `1px solid ${UI.border}`, marginBottom: 32 }}>
-        <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Guest List</div>
+        <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: UI.accent }}>Guest List</div>
         <div style={{ color: UI.muted, marginBottom: 8 }}>
           Upload your guest list (CSV), add, edit, or remove guests as needed. You can also send invitations individually if required.
         </div>
@@ -779,7 +796,7 @@ export default function DashboardPage() {
                     <select
                       value={g.status === "waitlisted" ? "waitlisted" : g.tier}
                       onChange={(e) => handleEditTier(g, e.target.value)}
-                      style={{ padding: "6px 10px", borderRadius: 10, border: `1px solid ${UI.border}`, background: "#fff" }}
+                      style={{ padding: "6px 10px", borderRadius: 10, border: `1px solid ${UI.border}`, background: getTierBadgeStyle(g.status === "waitlisted" ? "waitlisted" : g.tier).background, color: getTierBadgeStyle(g.status === "waitlisted" ? "waitlisted" : g.tier).color, fontWeight: 600 }}
                     >
                       <option value="founder">Ambassador</option>
                       <option value="tier1">Tier 1</option>
@@ -787,7 +804,11 @@ export default function DashboardPage() {
                       <option value="waitlisted">Waitlist</option>
                     </select>
                   </td>
-                  <td style={{ padding: 10, borderBottom: `1px solid ${UI.border}` }}>{getStatusLabel(g.status)}</td>
+                  <td style={{ padding: 10, borderBottom: `1px solid ${UI.border}` }}>
+                    <span style={{ padding: "3px 8px", borderRadius: 999, fontSize: 12, fontWeight: 600, ...getStatusBadgeStyle(g.status) }}>
+                      {getStatusLabel(g.status)}
+                    </span>
+                  </td>
                   <td style={{ padding: 10, borderBottom: `1px solid ${UI.border}` }}>{g.reminder_count ?? 0}</td>
                   <td style={{ padding: 10, borderBottom: `1px solid ${UI.border}` }}>{formatDateTime(g.last_reminder_at)}</td>
                   <td style={{ padding: 10, borderBottom: `1px solid ${UI.border}` }}>
@@ -821,7 +842,7 @@ export default function DashboardPage() {
 
         {/* Waitlist Section */}
         <div style={{ marginTop: 24, padding: 16, background: "#fff", borderRadius: 12, border: `1px solid ${UI.border}` }}>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Waitlist</div>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8, color: "#b45309" }}>Waitlist</div>
           {filteredWaitlist.length > 0 ? (
             <table style={{ width: '100%', background: '#fff', borderRadius: 8, borderCollapse: 'collapse', fontSize: 14, border: `1px solid ${UI.border}` }}>
               <thead>
@@ -860,11 +881,6 @@ export default function DashboardPage() {
 
       {/* Start Invitations */}
       {/* Invitation Progress Section (only once) */}
-      <div style={{ background: UI.card, borderRadius: 16, padding: 20, border: `1px solid ${UI.border}`, marginBottom: 32 }}>
-        <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Invitation Progress</div>
-        <InvitationProgressCard event={event} stats={stats} stage={stage} />
-      </div>
-
       {/* Final Report Section */}
       {showFinal && (
         <FinalReportSection stats={stats} guests={guests} />
@@ -904,36 +920,40 @@ function getStage(event) {
 }
 
 function InvitationProgressCard({ event, stats, stage }) {
+  const stageTone = stage?.label === "Founder Invitations"
+    ? { color: "#6d28d9", background: "#ede9fe" }
+    : stage?.label === "Tier 1 Invitations"
+      ? { color: "#1d4ed8", background: "#dbeafe" }
+      : stage?.label === "Tier 2 Invitations"
+        ? { color: "#15803d", background: "#dcfce7" }
+        : { color: "#6b7280", background: "#f3f4f6" };
+
+  const badge = (label, value, tone) => (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 10px", borderRadius: 10, border: `1px solid ${UI.border}`, background: "#fff" }}>
+      <span style={{ color: "#374151" }}>{label}</span>
+      <span style={{ color: tone.color, background: tone.background, padding: "3px 8px", borderRadius: 999, fontWeight: 600, fontSize: 12 }}>{value}</span>
+    </div>
+  );
+
   return (
     <div style={{ background: UI.card, borderRadius: 16, padding: 20, border: `1px solid ${UI.border}` }}>
-      <div style={{ marginBottom: 8 }}>
-        <b>Current Invitation Stage:</b> {stage?.label === "Founder Invitations" ? "Ambassador Invitations" : stage?.label || "—"}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 12 }}>
+        <div style={{ fontWeight: 600, color: UI.text }}>Invitation Progress</div>
+        <span style={{ color: stageTone.color, background: stageTone.background, padding: "4px 10px", borderRadius: 999, fontWeight: 600, fontSize: 12 }}>
+          {stage?.label === "Founder Invitations" ? "Ambassador Invitations" : stage?.label || "—"}
+        </span>
       </div>
       {stage?.ends && (
-        <div style={{ marginBottom: 8 }}>
-          <b>Time Remaining:</b> {formatTimeRemaining(stage.ends)}
-        </div>
+        <div style={{ marginBottom: 12, color: UI.muted }}>Time Remaining: <strong>{formatTimeRemaining(stage.ends)}</strong></div>
       )}
-      <div style={{ marginBottom: 8 }}>
-        <b>Guests Invited:</b> {stats?.invited_count ?? "—"}
-      </div>
-      <div style={{ marginBottom: 8 }}>
-        <b>Guests Confirmed:</b> {stats?.accepted_count ?? "—"}
-      </div>
-      <div style={{ marginBottom: 8 }}>
-        <b>Guests Declined:</b> {stats?.declined_count ?? "—"}
-      </div>
-      <div style={{ marginBottom: 8 }}>
-        <b>No Response Yet:</b> {stats?.pending_count ?? "—"}
-      </div>
-      <div style={{ marginBottom: 8 }}>
-        <b>Waitlisted:</b> {stats?.waitlisted_count ?? "—"}
-      </div>
-      <div style={{ marginBottom: 8 }}>
-        <b>Seats Confirmed:</b> {stats?.accepted_seats ?? "—"}
-      </div>
-      <div>
-        <b>Seats Remaining:</b> {stats?.remaining_seats ?? "—"}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
+        {badge("Guests Invited", stats?.invited_count ?? "—", { color: "#0369a1", background: "#e0f2fe" })}
+        {badge("Guests Confirmed", stats?.accepted_count ?? "—", { color: "#15803d", background: "#dcfce7" })}
+        {badge("Guests Declined", stats?.declined_count ?? "—", { color: "#b91c1c", background: "#fee2e2" })}
+        {badge("No Response Yet", stats?.pending_count ?? "—", { color: "#6b7280", background: "#f3f4f6" })}
+        {badge("Waitlisted", stats?.waitlisted_count ?? "—", { color: "#b45309", background: "#fef3c7" })}
+        {badge("Seats Confirmed", stats?.accepted_seats ?? "—", { color: "#15803d", background: "#dcfce7" })}
+        {badge("Seats Remaining", stats?.remaining_seats ?? "—", { color: "#6b7280", background: "#f3f4f6" })}
       </div>
     </div>
   );
@@ -970,13 +990,27 @@ function FinalReportSection({ stats, guests }) {
 
   return (
     <div style={{ background: UI.card, borderRadius: 16, padding: 20, border: `1px solid ${UI.border}`, marginBottom: 32 }}>
-      <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Final Attendance Report</div>
-      <div style={{ marginBottom: 8 }}><b>Attending:</b> {attending.length}</div>
-      <div style={{ marginBottom: 8 }}><b>Declined:</b> {declined.length}</div>
-      <div style={{ marginBottom: 8 }}><b>No Response:</b> {noResponse.length}</div>
-      <div style={{ marginBottom: 8 }}><b>Waitlisted:</b> {waitlisted.length}</div>
-      <div style={{ marginBottom: 8 }}><b>Seats Confirmed:</b> {totalSeats}</div>
-      <div style={{ marginBottom: 8 }}><b>Total Guests Processed:</b> {totalGuests}</div>
+      <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: UI.accent }}>Final Attendance Report</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
+        <div style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${UI.border}` }}>
+          <span style={{ color: "#15803d", fontWeight: 600 }}>Attending:</span> {attending.length}
+        </div>
+        <div style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${UI.border}` }}>
+          <span style={{ color: "#b91c1c", fontWeight: 600 }}>Declined:</span> {declined.length}
+        </div>
+        <div style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${UI.border}` }}>
+          <span style={{ color: "#6b7280", fontWeight: 600 }}>No Response:</span> {noResponse.length}
+        </div>
+        <div style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${UI.border}` }}>
+          <span style={{ color: "#b45309", fontWeight: 600 }}>Waitlisted:</span> {waitlisted.length}
+        </div>
+        <div style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${UI.border}` }}>
+          <span style={{ color: "#15803d", fontWeight: 600 }}>Seats Confirmed:</span> {totalSeats}
+        </div>
+        <div style={{ padding: "8px 10px", borderRadius: 10, border: `1px solid ${UI.border}` }}>
+          <span style={{ color: "#6b7280", fontWeight: 600 }}>Total Guests:</span> {totalGuests}
+        </div>
+      </div>
       <button style={{ marginTop: 12, padding: '8px 18px', borderRadius: 999, border: `1px solid ${UI.accent}`, background: UI.accent, color: '#fff', fontWeight: 600, cursor: 'pointer' }} onClick={exportCSV}>
         Export CSV
       </button>
@@ -1105,7 +1139,7 @@ function GuestDetailModal({ guest, event, token, invites, loading, onClose }) {
                 <div style={{ color: "#888", fontSize: 13 }}>No invite history.</div>
               )}
             </div>
-            <div style={{ marginBottom: 8, fontWeight: 600 }}>Invitation Preview</div>
+            <div style={{ marginBottom: 8, fontWeight: 600, color: UI.accent }}>Invitation Preview</div>
             <div style={{ marginBottom: 8 }}>
               <b>Subject:</b> <span style={{ color: "#2563eb" }}>{buildPreviewTemplate(subject, sample)}</span>
             </div>

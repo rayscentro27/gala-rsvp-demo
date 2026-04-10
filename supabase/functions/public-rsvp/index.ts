@@ -1,6 +1,7 @@
 import {
   addMinutes,
   createAdminClient,
+  getStageWindowForGuest,
   getInvitationContent,
   getThankYouContent,
   isOptions,
@@ -73,8 +74,13 @@ async function submitRsvp(req: Request, token: string | null, response: string |
 
   const { guest, event, tokenRow } = tokenRecord;
   if (tokenRow.used) return json({ error: "This RSVP link has already been used." }, 400);
-  if (tokenRow.expires_at && new Date(tokenRow.expires_at) < new Date()) {
+  const isFounder = guest.tier === "founder";
+  if (!isFounder && tokenRow.expires_at && new Date(tokenRow.expires_at) < new Date()) {
     return json({ error: "This RSVP link has expired." }, 400);
+  }
+
+  if (event.completed_at) {
+    return json({ error: "This event is now closed." }, 400);
   }
 
   const maxSeats = guest.tier === "founder"
@@ -83,6 +89,27 @@ async function submitRsvp(req: Request, token: string | null, response: string |
   const seatCount = response === "accepted"
     ? Math.min(Math.max(normalizeSeatCount(requestedSeats, 1), 1), maxSeats)
     : 0;
+
+  const stageWindow = getStageWindowForGuest(event, guest);
+  const nowDate = new Date();
+  const isLateFounder = Boolean(isFounder && stageWindow?.end && nowDate > stageWindow.end);
+  if (!isFounder && stageWindow?.end && nowDate > stageWindow.end) {
+    return json({ error: "The RSVP window for this invitation has closed." }, 400);
+  }
+
+  if (response === "accepted" && isLateFounder) {
+    const { data: stats } = await supabase
+      .from("gala_event_stats")
+      .select("remaining_seats, accepted_seats")
+      .eq("event_id", event.id)
+      .maybeSingle();
+    const remainingSeats = typeof stats?.remaining_seats === "number"
+      ? stats.remaining_seats
+      : Math.max(Number(event.total_capacity ?? 0) - Number(stats?.accepted_seats ?? 0), 0);
+    if (remainingSeats < seatCount || remainingSeats <= 0) {
+      return json({ error: "No seats remain available for this event." }, 400);
+    }
+  }
 
   const now = new Date().toISOString();
   const { error: guestError } = await supabase
