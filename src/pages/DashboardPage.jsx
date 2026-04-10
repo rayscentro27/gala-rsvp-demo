@@ -61,6 +61,10 @@ export default function DashboardPage() {
   const [guestToken, setGuestToken] = useState(null);
   const [guestInvites, setGuestInvites] = useState([]);
   const [loadingGuestDetails, setLoadingGuestDetails] = useState(false);
+  const [guestSearch, setGuestSearch] = useState("");
+  const [newGuestName, setNewGuestName] = useState("");
+  const [newGuestEmail, setNewGuestEmail] = useState("");
+  const [newGuestTier, setNewGuestTier] = useState("tier1");
 
   // --- Event Settings Save Handler ---
   async function handleSaveSettings() {
@@ -208,21 +212,25 @@ export default function DashboardPage() {
 
   async function handleAddGuest() {
     if (!event) return;
-    const full_name = window.prompt("Enter guest name:");
-    if (!full_name) return;
-    const email = window.prompt("Enter guest email:");
-    if (!email) return;
-    // Default tier for manual add (adjust as needed)
-    const tier = window.prompt("Enter guest tier (e.g. founder, tier1, tier2):", "tier1");
-    if (!tier) return;
+    const full_name = newGuestName.trim();
+    const email = newGuestEmail.trim();
+    if (!full_name || !email) {
+      setActionMsg("Please enter a name and email.");
+      return;
+    }
+    const tier = newGuestTier === "waitlisted" ? "tier1" : newGuestTier;
+    const status = newGuestTier === "waitlisted" ? "waitlisted" : "not_invited";
     setActionMsg("");
     setLoading(true);
     try {
       const { error } = await supabase
         .from("gala_guests")
-        .insert({ event_id: event.id, full_name, email, tier });
+        .insert({ event_id: event.id, full_name, email, tier, status });
       if (error) throw error;
       setActionMsg("Guest added!");
+      setNewGuestName("");
+      setNewGuestEmail("");
+      setNewGuestTier("tier1");
       await loadDashboard();
     } catch (err) {
       setActionMsg(err.message || "Failed to add guest.");
@@ -413,15 +421,17 @@ export default function DashboardPage() {
   }
 
   // --- Edit Guest Tier Handler ---
-  async function handleEditTier(guest) {
-    const newTier = window.prompt("Edit guest tier (e.g. founder, tier1, tier2):", guest.tier);
-    if (!newTier || newTier === guest.tier) return;
+  async function handleEditTier(guest, nextTierValue) {
+    if (!nextTierValue) return;
+    const newTier = nextTierValue === "waitlisted" ? guest.tier : nextTierValue;
+    const shouldWaitlist = nextTierValue === "waitlisted";
+    if (!shouldWaitlist && newTier === guest.tier && guest.status !== "waitlisted") return;
     setActionMsg("");
     setLoading(true);
     try {
       const { error } = await supabase
         .from("gala_guests")
-        .update({ tier: newTier })
+        .update({ tier: newTier, status: shouldWaitlist ? "waitlisted" : "not_invited" })
         .eq("id", guest.id);
       if (error) throw error;
       setActionMsg("Guest tier updated.");
@@ -546,6 +556,15 @@ export default function DashboardPage() {
       setLoading(false);
     }
   }
+
+  const filteredGuests = guests.filter((g) => {
+    if (!guestSearch.trim()) return true;
+    const term = guestSearch.trim().toLowerCase();
+    return String(g.full_name || "").toLowerCase().includes(term)
+      || String(g.email || "").toLowerCase().includes(term);
+  });
+  const filteredWaitlist = filteredGuests.filter((g) => g.status === "waitlisted");
+  const filteredMainGuests = filteredGuests.filter((g) => g.status !== "waitlisted");
 
   return (
     <div style={{ background: UI.bg, minHeight: "100vh" }}>
@@ -689,41 +708,84 @@ export default function DashboardPage() {
         <div style={{ color: UI.muted, fontSize: 13, marginBottom: 12 }}>
           Names, event title, and RSVP links are filled automatically when invitations are sent.
         </div>
-        <input
-          type="file"
-          accept=".csv"
-          style={{ marginBottom: 12 }}
-          onChange={handleGuestListUpload}
-        />
-        <button
-          style={{ marginLeft: 8, padding: '8px 18px', borderRadius: 999, border: `1px solid ${UI.accent}`, background: UI.accent, color: '#fff', fontWeight: 600, cursor: 'pointer' }}
-          onClick={handleAddGuest}
-        >
-          Add Guest Manually
-        </button>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+          <input
+            type="file"
+            accept=".csv"
+            onChange={handleGuestListUpload}
+          />
+          <input
+            type="text"
+            placeholder="Search guest name or email"
+            value={guestSearch}
+            onChange={(e) => setGuestSearch(e.target.value)}
+            style={{ padding: "8px 12px", borderRadius: 10, border: `1px solid ${UI.border}`, minWidth: 220 }}
+          />
+          <button
+            style={{ padding: '8px 18px', borderRadius: 999, border: `1px solid ${UI.accent}`, background: UI.accent, color: '#fff', fontWeight: 600, cursor: 'pointer' }}
+            onClick={handleAddGuest}
+          >
+            Add Guest Manually
+          </button>
+        </div>
+        <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", marginBottom: 12 }}>
+          <input
+            type="text"
+            placeholder="Guest name"
+            value={newGuestName}
+            onChange={(e) => setNewGuestName(e.target.value)}
+            style={{ padding: "8px 12px", borderRadius: 10, border: `1px solid ${UI.border}` }}
+          />
+          <input
+            type="email"
+            placeholder="Guest email"
+            value={newGuestEmail}
+            onChange={(e) => setNewGuestEmail(e.target.value)}
+            style={{ padding: "8px 12px", borderRadius: 10, border: `1px solid ${UI.border}` }}
+          />
+          <select
+            value={newGuestTier}
+            onChange={(e) => setNewGuestTier(e.target.value)}
+            style={{ padding: "8px 12px", borderRadius: 10, border: `1px solid ${UI.border}` }}
+          >
+            <option value="founder">Ambassador</option>
+            <option value="tier1">Tier 1</option>
+            <option value="tier2">Tier 2</option>
+            <option value="waitlisted">Waitlist</option>
+          </select>
+        </div>
 
         {/* Guest List Table */}
-        {guests.length > 0 ? (
-          <table style={{ width: '100%', marginTop: 18, background: '#fff', borderRadius: 12, borderCollapse: 'collapse', fontSize: 14, border: `1px solid ${UI.border}` }}>
-            <thead>
-              <tr style={{ background: '#f8fafc' }}>
-                <th style={{ padding: 10, borderBottom: `1px solid ${UI.border}`, textAlign: 'left' }}>Name</th>
-                <th style={{ padding: 10, borderBottom: `1px solid ${UI.border}`, textAlign: 'left' }}>Email</th>
-                <th style={{ padding: 10, borderBottom: `1px solid ${UI.border}`, textAlign: 'left' }}>Tier</th>
-                <th style={{ padding: 10, borderBottom: `1px solid ${UI.border}`, textAlign: 'left' }}>Status</th>
-                <th style={{ padding: 10, borderBottom: `1px solid ${UI.border}`, textAlign: 'left' }}>Reminder Count</th>
-                <th style={{ padding: 10, borderBottom: `1px solid ${UI.border}`, textAlign: 'left' }}>Last Reminder</th>
-                <th style={{ padding: 10, borderBottom: `1px solid ${UI.border}`, textAlign: 'left' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {guests.map(g => (
-                <tr key={g.id}>
+        {filteredMainGuests.length > 0 ? (
+          <div style={{ maxHeight: 600, overflowY: "auto", borderRadius: 12, border: `1px solid ${UI.border}`, background: "#fff" }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+              <thead>
+                <tr style={{ background: '#f8fafc' }}>
+                  <th style={{ padding: 10, borderBottom: `1px solid ${UI.border}`, textAlign: 'left', position: "sticky", top: 0, background: "#f8fafc", zIndex: 1 }}>Name</th>
+                  <th style={{ padding: 10, borderBottom: `1px solid ${UI.border}`, textAlign: 'left', position: "sticky", top: 0, background: "#f8fafc", zIndex: 1 }}>Email</th>
+                  <th style={{ padding: 10, borderBottom: `1px solid ${UI.border}`, textAlign: 'left', position: "sticky", top: 0, background: "#f8fafc", zIndex: 1 }}>Tier</th>
+                  <th style={{ padding: 10, borderBottom: `1px solid ${UI.border}`, textAlign: 'left', position: "sticky", top: 0, background: "#f8fafc", zIndex: 1 }}>Status</th>
+                  <th style={{ padding: 10, borderBottom: `1px solid ${UI.border}`, textAlign: 'left', position: "sticky", top: 0, background: "#f8fafc", zIndex: 1 }}>Reminder Count</th>
+                  <th style={{ padding: 10, borderBottom: `1px solid ${UI.border}`, textAlign: 'left', position: "sticky", top: 0, background: "#f8fafc", zIndex: 1 }}>Last Reminder</th>
+                  <th style={{ padding: 10, borderBottom: `1px solid ${UI.border}`, textAlign: 'left', position: "sticky", top: 0, background: "#f8fafc", zIndex: 1 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredMainGuests.map(g => (
+                  <tr key={g.id}>
                   <td style={{ padding: 10, borderBottom: `1px solid ${UI.border}` }}>{g.full_name || '—'}</td>
                   <td style={{ padding: 10, borderBottom: `1px solid ${UI.border}` }}>{g.email || '—'}</td>
                   <td style={{ padding: 10, borderBottom: `1px solid ${UI.border}` }}>
-                    {getTierLabel(g.tier)}{' '}
-                    <button style={{ marginLeft: 6, fontSize: 12, padding: '3px 8px', borderRadius: 999, border: `1px solid ${UI.accent}`, background: '#fff', color: UI.accent, cursor: 'pointer' }} onClick={() => handleEditTier(g)}>Edit</button>
+                    <select
+                      value={g.status === "waitlisted" ? "waitlisted" : g.tier}
+                      onChange={(e) => handleEditTier(g, e.target.value)}
+                      style={{ padding: "6px 10px", borderRadius: 10, border: `1px solid ${UI.border}`, background: "#fff" }}
+                    >
+                      <option value="founder">Ambassador</option>
+                      <option value="tier1">Tier 1</option>
+                      <option value="tier2">Tier 2</option>
+                      <option value="waitlisted">Waitlist</option>
+                    </select>
                   </td>
                   <td style={{ padding: 10, borderBottom: `1px solid ${UI.border}` }}>{getStatusLabel(g.status)}</td>
                   <td style={{ padding: 10, borderBottom: `1px solid ${UI.border}` }}>{g.reminder_count ?? 0}</td>
@@ -749,9 +811,10 @@ export default function DashboardPage() {
                     </button>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <div style={{ color: '#aaa', marginTop: 18 }}>No guests yet.</div>
         )}
@@ -759,7 +822,7 @@ export default function DashboardPage() {
         {/* Waitlist Section */}
         <div style={{ marginTop: 24, padding: 16, background: "#fff", borderRadius: 12, border: `1px solid ${UI.border}` }}>
           <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Waitlist</div>
-          {guests.filter(g => g.status === "waitlisted").length > 0 ? (
+          {filteredWaitlist.length > 0 ? (
             <table style={{ width: '100%', background: '#fff', borderRadius: 8, borderCollapse: 'collapse', fontSize: 14, border: `1px solid ${UI.border}` }}>
               <thead>
                 <tr style={{ background: '#f8fafc' }}>
@@ -770,7 +833,7 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {guests.filter(g => g.status === "waitlisted").map(g => (
+                {filteredWaitlist.map(g => (
                   <tr key={g.id}>
                     <td style={{ padding: 8, borderBottom: `1px solid ${UI.border}` }}>{g.full_name || "—"}</td>
                     <td style={{ padding: 8, borderBottom: `1px solid ${UI.border}` }}>{g.email || "—"}</td>
