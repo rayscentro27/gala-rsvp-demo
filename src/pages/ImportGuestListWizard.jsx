@@ -216,7 +216,7 @@ export default function ImportGuestListWizard({ open, onClose, event, onImported
   }, [rawRows, mapping, tierMap, existingEmails, useFullName]);
 
   useEffect(() => {
-    if (step === 2 && mapping.tier) {
+    if (step === 2 && hasColumn(mapping.tier)) {
       const values = buildTierValueSet(rawRows, mapping.tier);
       setTierValues(values);
       const initial = values.reduce((map, value) => {
@@ -224,6 +224,9 @@ export default function ImportGuestListWizard({ open, onClose, event, onImported
         return map;
       }, {});
       setTierMap(initial);
+    } else {
+      setTierValues([]);
+      setTierMap({});
     }
   }, [step, mapping.tier, rawRows]);
 
@@ -432,7 +435,9 @@ export default function ImportGuestListWizard({ open, onClose, event, onImported
                 Map the values found in your file to the guest tiers used by the system.
               </div>
               {tierValues.length === 0 ? (
-                <div style={{ color: "#475569" }}>No tier values were detected. Please return and verify the tier mapping column.</div>
+                <div style={{ color: "#475569" }}>
+                  No tier values were detected. You can continue to preview, where rows with missing guest groups will be marked for review.
+                </div>
               ) : (
                 tierValues.map((value) => (
                   <div key={value} style={styles.tierRow}>
@@ -528,7 +533,6 @@ export default function ImportGuestListWizard({ open, onClose, event, onImported
             <button
               type="button"
               onClick={() => setStep(3)}
-              disabled={!tierValues.length}
               style={styles.primaryButton}
             >
               Continue to preview
