@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import Papa from "papaparse";
 import { supabase } from "../lib/supabase";
+import ImportGuestListWizard from "./ImportGuestListWizard";
 
 // Helper: Map backend tier to display label
 function getTierLabel(tier) {
@@ -82,6 +82,7 @@ export default function DashboardPage() {
   const [newGuestName, setNewGuestName] = useState("");
   const [newGuestEmail, setNewGuestEmail] = useState("");
   const [newGuestTier, setNewGuestTier] = useState("tier1");
+  const [showImportWizard, setShowImportWizard] = useState(false);
 
   // --- Event Settings Save Handler ---
   async function handleSaveSettings() {
@@ -109,123 +110,7 @@ export default function DashboardPage() {
     }
   }
 
-  // --- Guest List Upload and Add Guest Handlers ---
-  async function handleGuestListUpload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    setActionMsg("");
-    setLoading(true);
-    // Helper to check if a row is empty
-    const isRowEmpty = (row) => {
-      if (Array.isArray(row)) {
-        return row.every(cell => !cell || String(cell).trim() === "");
-      } else if (typeof row === "object" && row !== null) {
-        return Object.values(row).every(cell => !cell || String(cell).trim() === "");
-      }
-      return true;
-    };
-    // Helper to coerce object row to array if needed, and trim trailing empty columns
-    const objectRowToArray = (row) => {
-      if (Array.isArray(row)) {
-        // Remove trailing empty columns and trim all values
-        const trimmed = row.map(cell => (cell ? String(cell).trim() : ""));
-        while (trimmed.length > 2 && (!trimmed[trimmed.length - 1] || trimmed[trimmed.length - 1] === "")) {
-          trimmed.pop();
-        }
-        return trimmed;
-      }
-      if (typeof row === "object" && row !== null) {
-        // Try to get first two values (name/email), trim them
-        const vals = Object.values(row).map(cell => (cell ? String(cell).trim() : ""));
-        return [vals[0], vals[1]];
-      }
-      return [];
-    };
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: async (results) => {
-        let guests = [];
-        // If header row is missing or only has one column, or if all header fields are empty, try parsing without header
-        const likelyHeaderless =
-          results.meta.fields.length < 2 ||
-          results.data.length === 0 ||
-          results.meta.fields.every(f => !f || String(f).trim() === "");
-        if (likelyHeaderless) {
-          // Re-parse without header
-          Papa.parse(file, {
-            header: false,
-            skipEmptyLines: true,
-            complete: async (raw) => {
-              guests = raw.data
-                .map(objectRowToArray)
-                .filter(row => Array.isArray(row) && row.length >= 2 && !isRowEmpty(row))
-                .map(row => ({
-                  event_id: event.id,
-                  full_name: row[0],
-                  email: row[1],
-                  tier: "tier1"
-                }))
-                .filter(g => g.full_name && g.email && g.tier);
-              if (guests.length === 0) {
-                setActionMsg("No valid guests found in CSV.");
-                setLoading(false);
-                return;
-              }
-              try {
-                const { error } = await supabase
-                  .from("gala_guests")
-                  .upsert(guests, { onConflict: "event_id,email" });
-                if (error) throw error;
-                setActionMsg(`Uploaded ${guests.length} guests.`);
-                await loadDashboard();
-              } catch (err) {
-                setActionMsg(err.message || "Failed to upload guests.");
-              } finally {
-                setLoading(false);
-              }
-            },
-            error: (err) => {
-              setActionMsg("CSV parse error: " + err.message);
-              setLoading(false);
-            }
-          });
-          return;
-        }
-        // Normal header-based parsing
-        guests = results.data
-          .filter(row => !isRowEmpty(row))
-          .map(row => ({
-            event_id: event.id,
-            full_name: row.full_name || row.name || "",
-            email: row.email || "",
-            tier: row.tier || "tier1"
-          }))
-          .filter(g => g.full_name && g.email && g.tier);
-        if (guests.length === 0) {
-          setActionMsg("No valid guests found in CSV.");
-          setLoading(false);
-          return;
-        }
-        try {
-          const { error } = await supabase
-            .from("gala_guests")
-            .upsert(guests, { onConflict: "event_id,email" });
-          if (error) throw error;
-          setActionMsg(`Uploaded ${guests.length} guests.`);
-          await loadDashboard();
-        } catch (err) {
-          setActionMsg(err.message || "Failed to upload guests.");
-        } finally {
-          setLoading(false);
-        }
-      },
-      error: (err) => {
-        setActionMsg("CSV parse error: " + err.message);
-        setLoading(false);
-      }
-    });
-  }
+  // --- Guest List Add Guest Handler ---
 
   async function handleAddGuest() {
     if (!event) return;
@@ -720,17 +605,19 @@ export default function DashboardPage() {
       <div style={{ background: UI.card, borderRadius: 16, padding: 20, border: `1px solid ${UI.border}`, marginBottom: 32 }}>
         <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: UI.accent }}>Guest List</div>
         <div style={{ color: UI.muted, marginBottom: 8 }}>
-          Upload your guest list (CSV), add, edit, or remove guests as needed. You can also send invitations individually if required.
+          Import your guest list from Excel or CSV, add guests manually, edit details, or remove guests as needed.
         </div>
         <div style={{ color: UI.muted, fontSize: 13, marginBottom: 12 }}>
           Names, event title, and RSVP links are filled automatically when invitations are sent.
         </div>
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
-          <input
-            type="file"
-            accept=".csv"
-            onChange={handleGuestListUpload}
-          />
+          <button
+            type="button"
+            style={{ padding: '8px 18px', borderRadius: 999, border: `1px solid ${UI.accent}`, background: '#fff', color: UI.accent, fontWeight: 600, cursor: 'pointer' }}
+            onClick={() => setShowImportWizard(true)}
+          >
+            Import Guest List
+          </button>
           <input
             type="text"
             placeholder="Search guest name or email"
@@ -899,6 +786,15 @@ export default function DashboardPage() {
           onClose={() => setSelectedGuest(null)}
         />
       )}
+      <ImportGuestListWizard
+        open={showImportWizard}
+        onClose={() => setShowImportWizard(false)}
+        event={event}
+        onImported={async (result) => {
+          setActionMsg(result?.message || "Guest list imported.");
+          await loadDashboard();
+        }}
+      />
       </div>
     </div>
   );
